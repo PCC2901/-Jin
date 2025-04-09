@@ -199,37 +199,34 @@ local function checkCombatByAttribute()
             local attacker = lb:FindFirstChild(attackerName)
             local humanoid = attacker and attacker:FindFirstChildOfClass("Humanoid")
             local disp = (humanoid and humanoid.DisplayName) or "Unknown"
+            
+            -- Chụp ảnh
+            local imageData = Solara:TakeScreenshot() -- Trả về binary
+            local encodedImage = base64.encode(imageData)
+            
+            -- Gửi webhook với ảnh đính kèm
+            local payload = {
+                content = "<@" .. DiscordID .. ">",
+                embeds = {{
+                    title = "⚠️ " .. playerName .. " đang bị tấn công ⚠️",
+                    description = "Bởi: " .. disp .. ", " .. attackerName,
+                    color = 0xff0000,
+                    image = { url = "attachment://combat.png" }
+                }},
+                allowed_mentions = { users = { DiscordID } }
+            }
 
-            -- Chụp màn hình
-            local screenshot = getscreenshot and getscreenshot()
-            if screenshot then
-                req({
-                    Url = Webhook_URL,
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "multipart/form-data; boundary=----WebKitFormBoundary",
-                    },
-                    Body = 
-                        "------WebKitFormBoundary\r\n" ..
-                        'Content-Disposition: form-data; name="payload_json"\r\n\r\n' ..
-                        HttpService:JSONEncode({
-                            content = "<@" .. DiscordID .. ">",
-                            embeds = {{
-                                title = "⚠️ " .. playerName .. " đang bị tấn công!",
-                                description = "Bởi: **" .. disp .. "** (`" .. attackerName .. "`)",
-                                color = 0xff0000
-                            }},
-                            allowed_mentions = { users = { DiscordID } }
-                        }) ..
-                        "\r\n------WebKitFormBoundary\r\n" ..
-                        'Content-Disposition: form-data; name="file"; filename="attack.png"\r\n' ..
-                        "Content-Type: image/png\r\n\r\n" ..
-                        screenshot ..
-                        "\r\n------WebKitFormBoundary--"
-                })
-            else
-                sendWebhookMessage("⚠️ " .. playerName .. " đang bị tấn công ⚠️", "\nBởi: " .. disp .. ", " .. attackerName, true)
-            end
+            req({
+                Url = Webhook_URL,
+                Method = "POST",
+                Headers = {["Content-Type"] = "multipart/form-data; boundary=----WebKitFormBoundary"},
+                Body = HttpService:JSONEncode(payload),
+                Files = {{
+                    Filename = "combat.png",
+                    FileData = imageData,
+                    ContentType = "image/png"
+                }}
+            })
 
             inCombatAlertSent = true
         elseif not attackerName then
@@ -239,6 +236,7 @@ local function checkCombatByAttribute()
         inCombatAlertSent = false
     end
 end
+
 
 
 spawn(function()
