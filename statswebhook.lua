@@ -13,6 +13,10 @@ local function safeRequest(options)
     if req then
         return req(options)
     else
+        if not HttpService.HttpEnabled then
+            warn("HTTP request disabled")
+            return
+        end
         return HttpService:PostAsync(
             options.Url,
             options.Body,
@@ -27,8 +31,8 @@ local playerName = (player.DisplayName ~= "" and player.DisplayName) or player.N
 
 local pg = player:WaitForChild("PlayerGui")
 repeat task.wait() until pg:FindFirstChild("HUD")
-local HUD = pg.HUD
-local StatsChecker = HUD.Tabs.StatsChecker
+local HUD = pg:WaitForChild("HUD")
+local StatsChecker = HUD:WaitForChild("Tabs"):WaitForChild("StatsChecker")
 
 local statNames      = {"STR", "DUR", "ST", "AG", "BS"}
 local statsInterval  = 600
@@ -37,7 +41,7 @@ local inCombatAlert  = false
 
 local function sendWebhookMessage(title, message, mention)
     local payload = {
-        content = mention and ("<@"..DiscordID..">") or ("**📢 Cập nhật từ "..playerName.."**"),
+        content = mention and ("<@"..DiscordID.."> ") or ("**📢 Cập nhật từ "..playerName.."**"),
         embeds  = {{ title = title, description = message, color = 0x00ff00 }}
     }
     if mention then
@@ -51,7 +55,7 @@ local function sendWebhookMessage(title, message, mention)
     })
 end
 
-sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..playerName.."** đã kết nối thành công!")
+sendWebhookMessage("📡 Webhook hoạt động", "✅ Kết nối thành công!", false)
 
 local function getStatValue(stat)
     local frame = StatsChecker:FindFirstChild(stat)
@@ -59,7 +63,8 @@ local function getStatValue(stat)
     local lbl  = frame:FindFirstChildWhichIsA("TextLabel")
     if not lbl then return 0 end
     local text = lbl.Text
-    local num  = text:match":%s*([%d%.]+)"
+    -- lấy số cuối cùng trong chuỗi, hỗ trợ float
+    local num = text:match("([%d%.]+)%s*$")
     return tonumber(num) or 0
 end
 
@@ -67,131 +72,121 @@ local function getStatRaw(stat)
     local frame = StatsChecker:FindFirstChild(stat)
     if not frame then return "N/A" end
     local lbl  = frame:FindFirstChildWhichIsA("TextLabel")
-    if not lbl then return "N/A" end
-    return lbl.Text
+    return lbl and lbl.Text or "N/A"
 end
 
 local function calculateTotal()
-    local t = 0
-    for _, s in ipairs(statNames) do
-        t = t + getStatValue(s)
+    local sum = 0
+    for _, name in ipairs(statNames) do
+        sum = sum + getStatValue(name)
     end
-    return t
+    return sum
 end
 
 local function getServerInfo()
     local miscs = HUD:FindFirstChild("Miscs")
     local stats = miscs and miscs:FindFirstChild("ServerStats")
-    return (
-        (stats and stats.ServerName and stats.ServerName.Text) or "N/A"
-    ), (
-        (stats and stats.Uptime     and stats.Uptime.Text)     or "N/A"
-    )
+    local serverName = stats and stats:FindFirstChild("ServerName") and stats.ServerName.Text or "N/A"
+    local uptime     = stats and stats:FindFirstChild("Uptime")     and stats.Uptime.Text     or "N/A"
+    return serverName, uptime
 end
 
 local function getMoney()
     local bars   = HUD:FindFirstChild("Bars")
     local main   = bars and bars:FindFirstChild("MainHUD")
     local cashUI = main and main:FindFirstChild("Cash")
-    return (cashUI and cashUI.Text) or "N/A"
+    return cashUI and cashUI.Text or "N/A"
 end
 
 local function sendStats()
     local total = calculateTotal()
     local msg   = string.format("💪 **Tổng Stats**: %.2f\n\n", total)
-    for _, s in ipairs(statNames) do
-        local raw = getStatRaw(s)
-        msg = msg .. string.format("%s: `%s`\n", s, raw)
+    for _, name in ipairs(statNames) do
+        local raw = getStatRaw(name)
+        msg = msg .. string.format("%s: `%s`\n", name, raw)
     end
     local server, up = getServerInfo()
     msg = msg .. string.format("\n🖥️ %s\n⌛: %s\n💰: %s", server, up, getMoney())
-    sendWebhookMessage("📊 Báo cáo Thống Kê", msg)
+    sendWebhookMessage("📊 Báo cáo Thống Kê", msg, false)
 end
 
 spawn(function()
-    while true do
-        task.wait(statsInterval)
+    while task.wait(statsInterval) do
         sendStats()
     end
 end)
 
 local function addESP(target)
+    -- kiểm tra đối tượng hợp lệ
+    if not (target:IsA("Model") or target:IsA("BasePart")) then return end
     if target:FindFirstChild("ESP_Highlight") then return end
-    local hl = Instance.new("Highlight", target)
-    hl.Name                = "ESP_Highlight"
-    hl.FillColor           = Color3.new(1, 0, 0)
-    hl.OutlineColor        = Color3.new(1, 1, 0)
-    hl.OutlineTransparency = 0
+
+    -- highlight
+    local hl = Instance.new("Highlight")
+    hl.Name  = "ESP_Highlight"
+    hl.Adornee = target:IsA("Model") and target or target
+    hl.FillColor    = Color3.new(1, 0, 0)
+    hl.OutlineColor = Color3.new(1, 1, 0)
     hl.FillTransparency    = 0.5
+    hl.OutlineTransparency = 0
+    hl.Parent = target
 
+    -- billboard name
+    local adorneePart = target:IsA("Model") and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildOfClass("BasePart"))
+                        or (target:IsA("BasePart") and target)
+    if not adorneePart then return end
     local bg = Instance.new("BillboardGui")
-    local adornee = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart")
-    if adornee then
-        bg.Adornee = adornee
-        bg.Parent  = target
-        bg.Name    = "NameESP"
-        bg.Size    = UDim2.new(0,100,0,50)
-        bg.AlwaysOnTop = true
-        bg.StudsOffset = Vector3.new(0,3,0)
+    bg.Name        = "NameESP"
+    bg.Adornee     = adorneePart
+    bg.Parent      = adorneePart
+    bg.Size        = UDim2.new(0,100,0,50)
+    bg.AlwaysOnTop = true
+    bg.StudsOffset = Vector3.new(0,3,0)
 
-        local tl = Instance.new("TextLabel", bg)
-        tl.Size                   = UDim2.new(1,0,1,0)
-        tl.BackgroundTransparency = 1
-        tl.Text                   = target.Name
-        tl.TextScaled            = true
-        tl.TextStrokeTransparency = 0
-    end
+    local tl = Instance.new("TextLabel")
+    tl.Size                   = UDim2.new(1,0,1,0)
+    tl.BackgroundTransparency = 1
+    tl.TextColor3            = Color3.new(1,1,1)
+    tl.TextStrokeTransparency = 0
+    tl.TextScaled            = true
+    tl.Text                   = target.Name
+    tl.Parent                 = bg
 end
 
+-- theo dõi và thêm ESP cho mob mới
 local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
-mobs.ChildAdded:Connect(function(m)
-    sendWebhookMessage(m.Name.." xuất hiện", "", true)
-    addESP(m)
-end)
-mobs.ChildRemoved:Connect(function(m)
-    sendWebhookMessage(m.Name.." biến mất", "", true)
-end)
+mobs.ChildAdded:Connect(addESP)
 
-local function trackDaniel(c, added)
-    if added then
-        sendWebhookMessage("Danielbody xuất hiện","", true)
-        addESP(c)
-    else
-        sendWebhookMessage("Danielbody biến mất","", true)
+-- Danielbody
+local living = Workspace:WaitForChild("LivingBeings")
+local function onDaniel(child, added)
+    if child.Name == "Danielbody" then
+        if added then addESP(child) end
+        sendWebhookMessage("Danielbody "..(added and "xuất hiện" or "biến mất"), "", true)
     end
 end
-local lb = Workspace:WaitForChild("LivingBeings")
-lb.ChildAdded:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,true) end end)
-lb.ChildRemoved:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,false) end end)
-if lb:FindFirstChild("Danielbody") then trackDaniel(lb.Danielbody,true) end
+living.ChildAdded:Connect(function(c) onDaniel(c, true) end)
+living.ChildRemoved:Connect(function(c) onDaniel(c, false) end)
+if living:FindFirstChild("Danielbody") then onDaniel(living:FindFirstChild("Danielbody"), true) end
 
--- Thay đổi combat detection: dùng AttributeChangedSignal
-local living = Workspace:WaitForChild("LivingBeings")
-local function onPlayerModelAdded(plModel)
-    if plModel.Name ~= player.Name then return end
+-- combat detection
+local function handleCombatChanged(plModel)
     plModel:GetAttributeChangedSignal("WhoStartedCombat"):Connect(function()
         local attacker = plModel:GetAttribute("WhoStartedCombat")
         if attacker and attacker ~= "" and not inCombatAlert then
             local ent = living:FindFirstChild(attacker)
             local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
-            sendWebhookMessage("⚠️ "..playerName.." đang bị tấn công ⚠️",
-                "Bởi: "..disp..", "..attacker, true)
+            sendWebhookMessage("⚠️ "..playerName.." đang bị tấn công ⚠️", "Bởi: "..disp..", "..attacker, true)
             inCombatAlert = true
         elseif not attacker or attacker == "" then
             inCombatAlert = false
         end
     end)
 end
-living.ChildAdded:Connect(onPlayerModelAdded)
--- Nếu đã tồn tại
-if living:FindFirstChild(player.Name) then
-    onPlayerModelAdded(living:FindFirstChild(player.Name))
-end
+living.ChildAdded:Connect(function(c) if c.Name == player.Name then handleCombatChanged(c) end end)
+if living:FindFirstChild(player.Name) then handleCombatChanged(living:FindFirstChild(player.Name)) end
 
-game:BindToClose(function()
-    sendWebhookMessage("🚫 Game Đóng", "Webhook của **"..playerName.."** đã dừng hoạt động", true)
-end)
-
+-- client close
 player.AncestryChanged:Connect(function(_, parent)
     if not parent then
         sendWebhookMessage("🚫 Người chơi rời game", playerName.." đã thoát khỏi trò chơi.", true)
