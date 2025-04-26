@@ -1,198 +1,201 @@
+-- Nhập các service cần thiết
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
+local Players     = game:GetService("Players")
+local Workspace   = game:GetService("Workspace")
 
-local Webhook_URL = _G.Webhook or error("Webhook URL chưa được thiết lập!")
-local DiscordID = _G.DiscordID or error("DiscordID chưa được thiết lập!")
+-- Lấy cấu hình từ _G, báo lỗi nếu thiếu
+local Webhook_URL = _G.Webhook    or error("Webhook URL chưa được thiết lập!")
+local DiscordID   = _G.DiscordID  or error("DiscordID chưa được thiết lập!")
 
-local req = syn and syn.request or http_request or request
-if not req then
-    warn("Không thể gửi Webhook, không tìm thấy phương thức request phù hợp.")
-    return
+-- Thiết lập phương thức gửi HTTP
+local req = syn and syn.request
+         or http_request
+         or request
+
+local function safeRequest(options)
+    if req then
+        return req(options)
+    else
+        -- Fallback: sử dụng HttpService.PostAsync
+        return HttpService:PostAsync(
+            options.Url,
+            options.Body,
+            Enum.HttpContentType.ApplicationJson
+        )
+    end
 end
 
+-- Lấy object người chơi
 local player = Players.LocalPlayer
 if not player then return end
+local playerName = (player.DisplayName ~= "" and player.DisplayName) or player.Name
 
-local playerName = player.DisplayName or player.Name
+-- Đợi PlayerGui và HUD load xong
 local pg = player:WaitForChild("PlayerGui")
+repeat task.wait() until pg:FindFirstChild("HUD")
+local HUD = pg.HUD
 
-local statNames = {"STR", "DUR", "ST", "AG", "BS"}
-local running, statsInterval, combatEnabled = true, 600, true
-local inCombatAlertSent = false
+-- Danh sách các stat cần lấy
+local statNames      = {"STR", "DUR", "ST", "AG", "BS"}
+local statsInterval  = 600      -- gửi mỗi 600s
+local combatEnabled  = true
+local inCombatAlert  = false    -- trạng thái đã gửi alert combat
 
-local function sendWebhookMessage(title, message, tag)
+-- Hàm gửi tin nhắn lên Discord
+local function sendWebhookMessage(title, message, mention)
     local payload = {
-        content = tag and ("<@" .. DiscordID .. ">") or ("**📢 Cập nhật từ " .. playerName .. "**"),
-        embeds = {{ title = title, description = message, color = 0x00ff00 }}
+        content = mention and ("<@"..DiscordID..">") or ("**📢 Cập nhật từ "..playerName.."**"),
+        embeds  = {{ title = title, description = message, color = 0x00ff00 }}
     }
-    if tag then payload.allowed_mentions = { users = { DiscordID } } end
-    req({
-        Url = Webhook_URL,
-        Method = "POST",
+    if mention then
+        payload.allowed_mentions = { users = { DiscordID } }
+    end
+    safeRequest({
+        Url     = Webhook_URL,
+        Method  = "POST",
         Headers = { ["Content-Type"] = "application/json" },
-        Body = HttpService:JSONEncode(payload)
+        Body    = HttpService:JSONEncode(payload)
     })
 end
 
--- Khởi tạo webhook khi script chạy
-sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **" .. playerName .. "** đã kết nối thành công!")
+-- Thông báo đã kết nối thành công
+sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..playerName.."** đã kết nối thành công!")
 
--- Hàm lấy giá trị stat trực tiếp từ TextLabel chứa "STAT: <số>"
-local function getStatValue(statName)
-    local statsChecker = pg:FindFirstChild("HUD")
-                        and pg.HUD:FindFirstChild("Tabs")
-                        and pg.HUD.Tabs:FindFirstChild("StatsChecker")
-    if not statsChecker then return 0 end
-
-    local statFrame = statsChecker:FindFirstChild(statName)
-    if not statFrame then return 0 end
-
-    local label = statFrame:FindFirstChildWhichIsA("TextLabel")
-    if not label then return 0 end
-
-    local text = label.Text
-    local num = tonumber(text:match("(%d+)") or 0) or 0
-    return num
+-- Hàm lấy giá trị stat từ UI StatsChecker
+local function getStatValue(stat)
+    local sc = HUD.Tabs and HUD.Tabs:FindFirstChild("StatsChecker")
+    if not sc then return 0 end
+    local frame = sc:FindFirstChild(stat)
+    if not frame then return 0 end
+    local lbl   = frame:FindFirstChildWhichIsA("TextLabel")
+    if not lbl then return 0 end
+    return tonumber(lbl.Text:match("(%d+)") or 0) or 0
 end
 
-local function calculateTotalStats()
-    local total = 0
-    for _, stat in ipairs(statNames) do
-        total = total + getStatValue(stat)
+-- Tính tổng
+local function calculateTotal()
+    local t = 0
+    for _, s in ipairs(statNames) do
+        t = t + getStatValue(s)
     end
-    return total
+    return t
 end
 
+-- Lấy tên server và uptime
 local function getServerInfo()
-    local hud = pg:FindFirstChild("HUD")
-    local miscs = hud and hud:FindFirstChild("Miscs")
+    local miscs = HUD:FindFirstChild("Miscs")
     local stats = miscs and miscs:FindFirstChild("ServerStats")
-    return stats and stats.ServerName and stats.ServerName.Text or "N/A",
-           stats and stats.Uptime and stats.Uptime.Text or "N/A"
+    return (
+        (stats and stats.ServerName and stats.ServerName.Text) or "N/A"
+    ), (
+        (stats and stats.Uptime     and stats.Uptime.Text)     or "N/A"
+    )
 end
 
+-- Lấy tiền
 local function getMoney()
-    local hud = pg:FindFirstChild("HUD")
-    local bars = hud and hud:FindFirstChild("Bars")
-    local mainHUD = bars and bars:FindFirstChild("MainHUD")
-    local cash = mainHUD and mainHUD:FindFirstChild("Cash")
-    return cash and cash.Text or "N/A"
+    local bars   = HUD:FindFirstChild("Bars")
+    local main   = bars and bars:FindFirstChild("MainHUD")
+    local cashUI = main and main:FindFirstChild("Cash")
+    return (cashUI and cashUI.Text) or "N/A"
 end
 
+-- Gửi báo cáo stats
 local function sendStats()
-    local total = calculateTotalStats()
+    local total = calculateTotal()
     local msg = string.format("💪 **Tổng Stats**: %d\n\n", total)
-    for _, stat in ipairs(statNames) do
-        local v = getStatValue(stat)
-        msg = msg .. string.format("%s: **%d**\n", stat, v)
+    for _, s in ipairs(statNames) do
+        msg = msg .. string.format("%s: **%d**\n", s, getStatValue(s))
     end
-    local server, uptime = getServerInfo()
-    msg = msg .. string.format("\n🖥️ %s\n⌛: %s\n💰: %s", server, uptime, getMoney())
+    local server, up = getServerInfo()
+    msg = msg .. string.format("\n🖥️ %s\n⌛: %s\n💰: %s", server, up, getMoney())
     sendWebhookMessage("📊 Báo cáo Thống Kê", msg)
 end
 
 -- Vòng lặp gửi stats định kỳ
 spawn(function()
-    while task.wait(statsInterval) do
-        if running then
-            sendStats()
-        end
+    while true do
+        task.wait(statsInterval)
+        sendStats()
     end
 end)
 
+-- Thêm ESP
 local function addESP(target)
     if target:FindFirstChild("ESP_Highlight") then return end
-    local hl = Instance.new("Highlight")
-    hl.Name = "ESP_Highlight"
-    hl.FillColor = Color3.new(1, 0, 0)
-    hl.OutlineColor = Color3.new(1, 1, 0)
+    local hl = Instance.new("Highlight", target)
+    hl.Name              = "ESP_Highlight"
+    hl.FillColor         = Color3.new(1, 0, 0)
+    hl.OutlineColor      = Color3.new(1, 1, 0)
     hl.OutlineTransparency = 0
-    hl.FillTransparency = 0.5
-    hl.Parent = target
+    hl.FillTransparency    = 0.5
 
-    local bg = Instance.new("BillboardGui")
-    bg.Name = "NameESP"
-    bg.Adornee = target
-    bg.Size = UDim2.new(0, 100, 0, 50)
+    local bg = Instance.new("BillboardGui", target)
+    bg.Name       = "NameESP"
+    bg.Adornee    = target
+    bg.Size       = UDim2.new(0,100,0,50)
     bg.AlwaysOnTop = true
-    bg.StudsOffset = Vector3.new(0, 3, 0)
+    bg.StudsOffset = Vector3.new(0,3,0)
 
     local tl = Instance.new("TextLabel", bg)
-    tl.Size = UDim2.new(1, 0, 1, 0)
+    tl.Size    = UDim2.new(1,0,1,0)
     tl.BackgroundTransparency = 1
-    tl.Text = target.Name
-    tl.TextColor3 = Color3.new(1, 1, 1)
+    tl.Text    = target.Name
+    tl.TextScaled            = true
     tl.TextStrokeTransparency = 0
-    tl.TextScaled = true
-
-    bg.Parent = target
 end
 
--- Watcher NPC trong LivingBeings.Mobs
-local mobsFolder = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
-mobsFolder.ChildAdded:Connect(function(mob)
-    sendWebhookMessage(mob.Name .. " xuất hiện", "", true)
-    addESP(mob)
+-- Theo dõi mob
+local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
+mobs.ChildAdded:Connect(function(m)
+    sendWebhookMessage(m.Name.." xuất hiện", "", true)
+    addESP(m)
 end)
-mobsFolder.ChildRemoved:Connect(function(mob)
-    sendWebhookMessage(mob.Name .. " biến mất", "", true)
+mobs.ChildRemoved:Connect(function(m)
+    sendWebhookMessage(m.Name.." biến mất", "", true)
 end)
 
--- Watcher Danielbody (nếu cần giữ)
-local function onDanielbodyAppeared(d)
-    sendWebhookMessage("Danielbody xuất hiện", "", true)
-    addESP(d)
-end
-
-local function onDanielbodyRemoved(d)
-    sendWebhookMessage("Danielbody biến mất", "", true)
-end
-
-local lb = Workspace:WaitForChild("LivingBeings")
-lb.ChildAdded:Connect(function(child)
-    if child.Name == "Danielbody" then
-        onDanielbodyAppeared(child)
-    end
-end)
-lb.ChildRemoved:Connect(function(child)
-    if child.Name == "Danielbody" then
-        onDanielbodyRemoved(child)
-    end
-end)
-if lb:FindFirstChild("Danielbody") then
-    onDanielbodyAppeared(lb.Danielbody)
-end
-
-local function checkCombatByAttribute()
-    local lb = Workspace:FindFirstChild("LivingBeings")
-    if not lb then return end
-    local pl = lb:FindFirstChild(player.Name)
-    if pl then
-        local attackerName = pl:GetAttribute("WhoStartedCombat")
-        if attackerName and not inCombatAlertSent then
-            local attacker = lb:FindFirstChild(attackerName)
-            local humanoid = attacker and attacker:FindFirstChildOfClass("Humanoid")
-            local disp = (humanoid and humanoid.DisplayName) or "Unknown"
-            sendWebhookMessage("⚠️ " .. playerName .. " đang bị tấn công ⚠️",
-                "\nBởi: " .. disp .. ", " .. attackerName, true)
-            inCombatAlertSent = true
-        elseif not attackerName then
-            inCombatAlertSent = false
-        end
+-- Theo dõi Danielbody
+local function trackDaniel(c, added)
+    if added then
+        sendWebhookMessage("Danielbody xuất hiện","", true)
+        addESP(c)
     else
-        inCombatAlertSent = false
+        sendWebhookMessage("Danielbody biến mất","", true)
     end
 end
+local lb = Workspace:WaitForChild("LivingBeings")
+lb.ChildAdded:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,true) end end)
+lb.ChildRemoved:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,false) end end)
+if lb:FindFirstChild("Danielbody") then trackDaniel(lb.Danielbody,true) end
 
+-- Kiểm tra combat mỗi giây
 spawn(function()
-    while task.wait(1) do
-        if combatEnabled then
-            checkCombatByAttribute()
+    while combatEnabled do
+        task.wait(1)
+        local container = Workspace:FindFirstChild("LivingBeings")
+        local plModel    = container and container:FindFirstChild(player.Name)
+        if plModel then
+            local attacker = plModel:GetAttribute("WhoStartedCombat")
+            if attacker and not inCombatAlert then
+                local ent = container:FindFirstChild(attacker)
+                local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
+                sendWebhookMessage("⚠️ "..playerName.." đang bị tấn công ⚠️",
+                    "Bởi: "..disp..", "..attacker, true)
+                inCombatAlert = true
+            elseif not attacker then
+                inCombatAlert = false
+            end
+        else
+            inCombatAlert = false
         end
     end
 end)
 
-game:BindToClose(function()
-    sendWebhookMessage("🚫 Game Đóng", "Webhook của **" .. playerName .. "** đã dừng hoạt động", true)
+-- Báo khi người chơi rời
+target = player
+player.AncestryChanged:Connect(function(_, parent)
+    if not parent then
+        sendWebhookMessage("🚫 Người chơi rời game", playerName.." đã thoát khỏi trò chơi.", true)
+    end
 end)
