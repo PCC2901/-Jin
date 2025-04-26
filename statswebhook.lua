@@ -92,7 +92,8 @@ local function sendStats()
     sendWebhookMessage("📊 Báo cáo Thống Kê", msg)
 end
 
--- Vòng lặp gửi stats định kỳ\spawn(function()
+-- Vòng lặp gửi stats định kỳ
+spawn(function()
     while task.wait(statsInterval) do
         if running then sendStats() end
     end
