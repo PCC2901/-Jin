@@ -53,13 +53,24 @@ end
 
 sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..playerName.."** đã kết nối thành công!")
 
+-- Lấy giá trị số từ text label
 local function getStatValue(stat)
     local frame = StatsChecker:FindFirstChild(stat)
     if not frame then return 0 end
-    local lbl     = frame:FindFirstChildWhichIsA("TextLabel")
+    local lbl  = frame:FindFirstChildWhichIsA("TextLabel")
     if not lbl then return 0 end
-    local text    = lbl.Text
-    return tonumber(text:match("([%d%.]+)") or 0) or 0
+    local text = lbl.Text
+    local num  = text:match":%s*([%d%.]+)"
+    return tonumber(num) or 0
+end
+
+-- Lấy toàn bộ nội dung text label
+local function getStatRaw(stat)
+    local frame = StatsChecker:FindFirstChild(stat)
+    if not frame then return "N/A" end
+    local lbl  = frame:FindFirstChildWhichIsA("TextLabel")
+    if not lbl then return "N/A" end
+    return lbl.Text
 end
 
 local function calculateTotal()
@@ -89,9 +100,10 @@ end
 
 local function sendStats()
     local total = calculateTotal()
-    local msg = string.format("💪 **Tổng Stats**: %.2f\n\n", total)
+    local msg   = string.format("💪 **Tổng Stats**: %.2f\n\n", total)
     for _, s in ipairs(statNames) do
-        msg = msg .. string.format("%s: **%.2f**\n", s, getStatValue(s))
+        local raw = getStatRaw(s)
+        msg = msg .. string.format("%s: `%s`\n", s, raw)
     end
     local server, up = getServerInfo()
     msg = msg .. string.format("\n🖥️ %s\n⌛: %s\n💰: %s", server, up, getMoney())
@@ -114,19 +126,23 @@ local function addESP(target)
     hl.OutlineTransparency = 0
     hl.FillTransparency    = 0.5
 
-    local bg = Instance.new("BillboardGui", target)
-    bg.Name         = "NameESP"
-    bg.Adornee      = target
-    bg.Size         = UDim2.new(0,100,0,50)
-    bg.AlwaysOnTop  = true
-    bg.StudsOffset  = Vector3.new(0,3,0)
+    local bg = Instance.new("BillboardGui")
+    local adornee = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart")
+    if adornee then
+        bg.Adornee = adornee
+        bg.Parent  = target
+        bg.Name    = "NameESP"
+        bg.Size    = UDim2.new(0,100,0,50)
+        bg.AlwaysOnTop = true
+        bg.StudsOffset = Vector3.new(0,3,0)
 
-    local tl = Instance.new("TextLabel", bg)
-    tl.Size                   = UDim2.new(1,0,1,0)
-    tl.BackgroundTransparency = 1
-    tl.Text                   = target.Name
-    tl.TextScaled            = true
-    tl.TextStrokeTransparency = 0
+        local tl = Instance.new("TextLabel", bg)
+        tl.Size                   = UDim2.new(1,0,1,0)
+        tl.BackgroundTransparency = 1
+        tl.Text                   = target.Name
+        tl.TextScaled            = true
+        tl.TextStrokeTransparency = 0
+    end
 end
 
 local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
@@ -155,7 +171,7 @@ spawn(function()
     while combatEnabled do
         task.wait(1)
         local container = Workspace:FindFirstChild("LivingBeings")
-        local plModel    = container and container:FindFirstChild(player.Name)
+        local plModel   = container and container:FindFirstChild(player.Name)
         if plModel then
             local attacker = plModel:GetAttribute("WhoStartedCombat")
             if attacker and not inCombatAlert then
@@ -173,7 +189,10 @@ spawn(function()
     end
 end)
 
-target = player
+game:BindToClose(function()
+    sendWebhookMessage("🚫 Game Đóng", "Webhook của **"..playerName.."** đã dừng hoạt động", true)
+end)
+
 player.AncestryChanged:Connect(function(_, parent)
     if not parent then
         sendWebhookMessage("🚫 Người chơi rời game", playerName.." đã thoát khỏi trò chơi.", true)
