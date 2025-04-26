@@ -80,12 +80,22 @@ local function addESP(target)
     tl.Parent = bg
 end
 
--- Tự động thêm ESP cho mobs có sẵn và mobs mới
+-- Xử lý Webhook khi Mob xuất hiện/biến mất và thêm ESP
 local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
+-- mobs có sẵn
 for _, mob in ipairs(mobs:GetChildren()) do
     addESP(mob)
+    sendWebhookMessage(mob.Name .. " xuất hiện", "", true)
 end
-mobs.ChildAdded:Connect(addESP)
+-- mobs mới
+mobs.ChildAdded:Connect(function(m)
+    addESP(m)
+    sendWebhookMessage(m.Name .. " xuất hiện", "", true)
+end)
+-- mobs bị loại bỏ
+mobs.ChildRemoved:Connect(function(m)
+    sendWebhookMessage(m.Name .. " biến mất", "", true)
+end)
 
 -- Theo dõi Boss Danielbody
 local living = Workspace:WaitForChild("LivingBeings")
@@ -95,7 +105,7 @@ local function onDaniel(child, added)
             addESP(child)
         end
         sendWebhookMessage(
-            "Danielbody "..(added and "xuất hiện" or "biến mất"),
+            "Danielbody " .. (added and "xuất hiện" or "biến mất"),
             "", true
         )
     end
@@ -115,7 +125,7 @@ local function handleCombat(plModel)
             local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
             sendWebhookMessage(
                 "⚠️ Bạn đang bị tấn công ⚠️",
-                "Bởi: "..disp..", "..attacker,
+                "Bởi: " .. disp .. ", " .. attacker,
                 true
             )
         end
