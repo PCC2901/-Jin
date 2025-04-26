@@ -95,7 +95,9 @@ end
 -- Vòng lặp gửi stats định kỳ
 spawn(function()
     while task.wait(statsInterval) do
-        if running then sendStats() end
+        if running then
+            sendStats()
+        end
     end
 end)
 
@@ -149,10 +151,14 @@ end
 
 local lb = Workspace:WaitForChild("LivingBeings")
 lb.ChildAdded:Connect(function(child)
-    if child.Name == "Danielbody" then onDanielbodyAppeared(child) end
+    if child.Name == "Danielbody" then
+        onDanielbodyAppeared(child)
+    end
 end)
 lb.ChildRemoved:Connect(function(child)
-    if child.Name == "Danielbody" then onDanielbodyRemoved(child) end
+    if child.Name == "Danielbody" then
+        onDanielbodyRemoved(child)
+    end
 end)
 if lb:FindFirstChild("Danielbody") then
     onDanielbodyAppeared(lb.Danielbody)
