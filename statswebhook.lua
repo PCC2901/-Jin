@@ -28,6 +28,7 @@ local playerName = (player.DisplayName ~= "" and player.DisplayName) or player.N
 local pg = player:WaitForChild("PlayerGui")
 repeat task.wait() until pg:FindFirstChild("HUD")
 local HUD = pg.HUD
+local StatsChecker = HUD.Tabs.StatsChecker
 
 local statNames      = {"STR", "DUR", "ST", "AG", "BS"}
 local statsInterval  = 600
@@ -53,9 +54,7 @@ end
 sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..playerName.."** đã kết nối thành công!")
 
 local function getStatValue(stat)
-    local sc = HUD.Tabs and HUD.Tabs:FindFirstChild("StatsChecker")
-    if not sc then return 0 end
-    local frame = sc:FindFirstChild(stat)
+    local frame = StatsChecker:FindFirstChild(stat)
     if not frame then return 0 end
     local lbl   = frame:FindFirstChildWhichIsA("TextLabel")
     if not lbl then return 0 end
