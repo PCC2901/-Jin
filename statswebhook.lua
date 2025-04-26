@@ -53,7 +53,6 @@ end
 
 sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..playerName.."** đã kết nối thành công!")
 
--- Lấy giá trị số từ text label
 local function getStatValue(stat)
     local frame = StatsChecker:FindFirstChild(stat)
     if not frame then return 0 end
@@ -64,7 +63,6 @@ local function getStatValue(stat)
     return tonumber(num) or 0
 end
 
--- Lấy toàn bộ nội dung text label
 local function getStatRaw(stat)
     local frame = StatsChecker:FindFirstChild(stat)
     if not frame then return "N/A" end
@@ -167,27 +165,28 @@ lb.ChildAdded:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,tru
 lb.ChildRemoved:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,false) end end)
 if lb:FindFirstChild("Danielbody") then trackDaniel(lb.Danielbody,true) end
 
-spawn(function()
-    while combatEnabled do
-        task.wait(1)
-        local container = Workspace:FindFirstChild("LivingBeings")
-        local plModel   = container and container:FindFirstChild(player.Name)
-        if plModel then
-            local attacker = plModel:GetAttribute("WhoStartedCombat")
-            if attacker and not inCombatAlert then
-                local ent = container:FindFirstChild(attacker)
-                local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
-                sendWebhookMessage("⚠️ "..playerName.." đang bị tấn công ⚠️",
-                    "Bởi: "..disp..", "..attacker, true)
-                inCombatAlert = true
-            elseif not attacker then
-                inCombatAlert = false
-            end
-        else
+-- Thay đổi combat detection: dùng AttributeChangedSignal
+local living = Workspace:WaitForChild("LivingBeings")
+local function onPlayerModelAdded(plModel)
+    if plModel.Name ~= player.Name then return end
+    plModel:GetAttributeChangedSignal("WhoStartedCombat"):Connect(function()
+        local attacker = plModel:GetAttribute("WhoStartedCombat")
+        if attacker and attacker ~= "" and not inCombatAlert then
+            local ent = living:FindFirstChild(attacker)
+            local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
+            sendWebhookMessage("⚠️ "..playerName.." đang bị tấn công ⚠️",
+                "Bởi: "..disp..", "..attacker, true)
+            inCombatAlert = true
+        elseif not attacker or attacker == "" then
             inCombatAlert = false
         end
-    end
-end)
+    end)
+end
+living.ChildAdded:Connect(onPlayerModelAdded)
+-- Nếu đã tồn tại
+if living:FindFirstChild(player.Name) then
+    onPlayerModelAdded(living:FindFirstChild(player.Name))
+end
 
 game:BindToClose(function()
     sendWebhookMessage("🚫 Game Đóng", "Webhook của **"..playerName.."** đã dừng hoạt động", true)
