@@ -63,7 +63,6 @@ local function getStatValue(stat)
     local lbl  = frame:FindFirstChildWhichIsA("TextLabel")
     if not lbl then return 0 end
     local text = lbl.Text
-    -- lấy số cuối cùng trong chuỗi, hỗ trợ float
     local num = text:match("([%d%.]+)%s*$")
     return tonumber(num) or 0
 end
@@ -117,47 +116,44 @@ spawn(function()
 end)
 
 local function addESP(target)
-    -- kiểm tra đối tượng hợp lệ
-    if not (target:IsA("Model") or target:IsA("BasePart")) then return end
+    if not target:IsA("Model") then return end
     if target:FindFirstChild("ESP_Highlight") then return end
+    local adorneePart = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildOfClass("BasePart")
+    if not adorneePart then return end
 
-    -- highlight
     local hl = Instance.new("Highlight")
-    hl.Name  = "ESP_Highlight"
-    hl.Adornee = target:IsA("Model") and target or target
-    hl.FillColor    = Color3.new(1, 0, 0)
+    hl.Name = "ESP_Highlight"
+    hl.Adornee = adorneePart
+    hl.FillColor = Color3.new(1, 0, 0)
     hl.OutlineColor = Color3.new(1, 1, 0)
-    hl.FillTransparency    = 0.5
+    hl.FillTransparency = 0.5
     hl.OutlineTransparency = 0
     hl.Parent = target
 
-    -- billboard name
-    local adorneePart = target:IsA("Model") and (target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildOfClass("BasePart"))
-                        or (target:IsA("BasePart") and target)
-    if not adorneePart then return end
     local bg = Instance.new("BillboardGui")
-    bg.Name        = "NameESP"
-    bg.Adornee     = adorneePart
-    bg.Parent      = adorneePart
-    bg.Size        = UDim2.new(0,100,0,50)
+    bg.Name = "NameESP"
+    bg.Adornee = adorneePart
+    bg.Size = UDim2.new(0, 100, 0, 50)
     bg.AlwaysOnTop = true
-    bg.StudsOffset = Vector3.new(0,3,0)
+    bg.StudsOffset = Vector3.new(0, 3, 0)
+    bg.Parent = adorneePart
 
     local tl = Instance.new("TextLabel")
-    tl.Size                   = UDim2.new(1,0,1,0)
+    tl.Size = UDim2.new(1, 0, 1, 0)
     tl.BackgroundTransparency = 1
-    tl.TextColor3            = Color3.new(1,1,1)
+    tl.TextColor3 = Color3.new(1, 1, 1)
     tl.TextStrokeTransparency = 0
-    tl.TextScaled            = true
-    tl.Text                   = target.Name
-    tl.Parent                 = bg
+    tl.TextScaled = true
+    tl.Text = target.Name
+    tl.Parent = bg
 end
 
--- theo dõi và thêm ESP cho mob mới
 local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
+for _, mob in ipairs(mobs:GetChildren()) do
+    addESP(mob)
+end
 mobs.ChildAdded:Connect(addESP)
 
--- Danielbody
 local living = Workspace:WaitForChild("LivingBeings")
 local function onDaniel(child, added)
     if child.Name == "Danielbody" then
@@ -169,7 +165,6 @@ living.ChildAdded:Connect(function(c) onDaniel(c, true) end)
 living.ChildRemoved:Connect(function(c) onDaniel(c, false) end)
 if living:FindFirstChild("Danielbody") then onDaniel(living:FindFirstChild("Danielbody"), true) end
 
--- combat detection
 local function handleCombatChanged(plModel)
     plModel:GetAttributeChangedSignal("WhoStartedCombat"):Connect(function()
         local attacker = plModel:GetAttribute("WhoStartedCombat")
@@ -186,7 +181,6 @@ end
 living.ChildAdded:Connect(function(c) if c.Name == player.Name then handleCombatChanged(c) end end)
 if living:FindFirstChild(player.Name) then handleCombatChanged(living:FindFirstChild(player.Name)) end
 
--- client close
 player.AncestryChanged:Connect(function(_, parent)
     if not parent then
         sendWebhookMessage("🚫 Người chơi rời game", playerName.." đã thoát khỏi trò chơi.", true)
