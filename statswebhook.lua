@@ -56,9 +56,10 @@ sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..player
 local function getStatValue(stat)
     local frame = StatsChecker:FindFirstChild(stat)
     if not frame then return 0 end
-    local lbl   = frame:FindFirstChildWhichIsA("TextLabel")
+    local lbl     = frame:FindFirstChildWhichIsA("TextLabel")
     if not lbl then return 0 end
-    return tonumber(lbl.Text:match("(%d+)") or 0) or 0
+    local text    = lbl.Text
+    return tonumber(text:match("([%d%.]+)") or 0) or 0
 end
 
 local function calculateTotal()
@@ -88,9 +89,9 @@ end
 
 local function sendStats()
     local total = calculateTotal()
-    local msg = string.format("💪 **Tổng Stats**: %d\n\n", total)
+    local msg = string.format("💪 **Tổng Stats**: %.2f\n\n", total)
     for _, s in ipairs(statNames) do
-        msg = msg .. string.format("%s: **%d**\n", s, getStatValue(s))
+        msg = msg .. string.format("%s: **%.2f**\n", s, getStatValue(s))
     end
     local server, up = getServerInfo()
     msg = msg .. string.format("\n🖥️ %s\n⌛: %s\n💰: %s", server, up, getMoney())
@@ -107,23 +108,23 @@ end)
 local function addESP(target)
     if target:FindFirstChild("ESP_Highlight") then return end
     local hl = Instance.new("Highlight", target)
-    hl.Name              = "ESP_Highlight"
-    hl.FillColor         = Color3.new(1, 0, 0)
-    hl.OutlineColor      = Color3.new(1, 1, 0)
+    hl.Name                = "ESP_Highlight"
+    hl.FillColor           = Color3.new(1, 0, 0)
+    hl.OutlineColor        = Color3.new(1, 1, 0)
     hl.OutlineTransparency = 0
     hl.FillTransparency    = 0.5
 
     local bg = Instance.new("BillboardGui", target)
-    bg.Name       = "NameESP"
-    bg.Adornee    = target
-    bg.Size       = UDim2.new(0,100,0,50)
-    bg.AlwaysOnTop = true
-    bg.StudsOffset = Vector3.new(0,3,0)
+    bg.Name         = "NameESP"
+    bg.Adornee      = target
+    bg.Size         = UDim2.new(0,100,0,50)
+    bg.AlwaysOnTop  = true
+    bg.StudsOffset  = Vector3.new(0,3,0)
 
     local tl = Instance.new("TextLabel", bg)
-    tl.Size    = UDim2.new(1,0,1,0)
+    tl.Size                   = UDim2.new(1,0,1,0)
     tl.BackgroundTransparency = 1
-    tl.Text    = target.Name
+    tl.Text                   = target.Name
     tl.TextScaled            = true
     tl.TextStrokeTransparency = 0
 end
