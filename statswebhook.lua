@@ -1,13 +1,10 @@
--- Nhập các service cần thiết
 local HttpService = game:GetService("HttpService")
 local Players     = game:GetService("Players")
 local Workspace   = game:GetService("Workspace")
 
--- Lấy cấu hình từ _G, báo lỗi nếu thiếu
 local Webhook_URL = _G.Webhook    or error("Webhook URL chưa được thiết lập!")
 local DiscordID   = _G.DiscordID  or error("DiscordID chưa được thiết lập!")
 
--- Thiết lập phương thức gửi HTTP
 local req = syn and syn.request
          or http_request
          or request
@@ -16,7 +13,6 @@ local function safeRequest(options)
     if req then
         return req(options)
     else
-        -- Fallback: sử dụng HttpService.PostAsync
         return HttpService:PostAsync(
             options.Url,
             options.Body,
@@ -25,23 +21,19 @@ local function safeRequest(options)
     end
 end
 
--- Lấy object người chơi
 local player = Players.LocalPlayer
 if not player then return end
 local playerName = (player.DisplayName ~= "" and player.DisplayName) or player.Name
 
--- Đợi PlayerGui và HUD load xong
 local pg = player:WaitForChild("PlayerGui")
 repeat task.wait() until pg:FindFirstChild("HUD")
 local HUD = pg.HUD
 
--- Danh sách các stat cần lấy
 local statNames      = {"STR", "DUR", "ST", "AG", "BS"}
-local statsInterval  = 600      -- gửi mỗi 600s
+local statsInterval  = 600
 local combatEnabled  = true
-local inCombatAlert  = false    -- trạng thái đã gửi alert combat
+local inCombatAlert  = false
 
--- Hàm gửi tin nhắn lên Discord
 local function sendWebhookMessage(title, message, mention)
     local payload = {
         content = mention and ("<@"..DiscordID..">") or ("**📢 Cập nhật từ "..playerName.."**"),
@@ -58,10 +50,8 @@ local function sendWebhookMessage(title, message, mention)
     })
 end
 
--- Thông báo đã kết nối thành công
 sendWebhookMessage("📡 Webhook hoạt động", "✅ Webhook của **"..playerName.."** đã kết nối thành công!")
 
--- Hàm lấy giá trị stat từ UI StatsChecker
 local function getStatValue(stat)
     local sc = HUD.Tabs and HUD.Tabs:FindFirstChild("StatsChecker")
     if not sc then return 0 end
@@ -72,7 +62,6 @@ local function getStatValue(stat)
     return tonumber(lbl.Text:match("(%d+)") or 0) or 0
 end
 
--- Tính tổng
 local function calculateTotal()
     local t = 0
     for _, s in ipairs(statNames) do
@@ -81,7 +70,6 @@ local function calculateTotal()
     return t
 end
 
--- Lấy tên server và uptime
 local function getServerInfo()
     local miscs = HUD:FindFirstChild("Miscs")
     local stats = miscs and miscs:FindFirstChild("ServerStats")
@@ -92,7 +80,6 @@ local function getServerInfo()
     )
 end
 
--- Lấy tiền
 local function getMoney()
     local bars   = HUD:FindFirstChild("Bars")
     local main   = bars and bars:FindFirstChild("MainHUD")
@@ -100,7 +87,6 @@ local function getMoney()
     return (cashUI and cashUI.Text) or "N/A"
 end
 
--- Gửi báo cáo stats
 local function sendStats()
     local total = calculateTotal()
     local msg = string.format("💪 **Tổng Stats**: %d\n\n", total)
@@ -112,7 +98,6 @@ local function sendStats()
     sendWebhookMessage("📊 Báo cáo Thống Kê", msg)
 end
 
--- Vòng lặp gửi stats định kỳ
 spawn(function()
     while true do
         task.wait(statsInterval)
@@ -120,7 +105,6 @@ spawn(function()
     end
 end)
 
--- Thêm ESP
 local function addESP(target)
     if target:FindFirstChild("ESP_Highlight") then return end
     local hl = Instance.new("Highlight", target)
@@ -145,7 +129,6 @@ local function addESP(target)
     tl.TextStrokeTransparency = 0
 end
 
--- Theo dõi mob
 local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
 mobs.ChildAdded:Connect(function(m)
     sendWebhookMessage(m.Name.." xuất hiện", "", true)
@@ -155,7 +138,6 @@ mobs.ChildRemoved:Connect(function(m)
     sendWebhookMessage(m.Name.." biến mất", "", true)
 end)
 
--- Theo dõi Danielbody
 local function trackDaniel(c, added)
     if added then
         sendWebhookMessage("Danielbody xuất hiện","", true)
@@ -169,7 +151,6 @@ lb.ChildAdded:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,tru
 lb.ChildRemoved:Connect(function(c) if c.Name=="Danielbody" then trackDaniel(c,false) end end)
 if lb:FindFirstChild("Danielbody") then trackDaniel(lb.Danielbody,true) end
 
--- Kiểm tra combat mỗi giây
 spawn(function()
     while combatEnabled do
         task.wait(1)
@@ -192,7 +173,6 @@ spawn(function()
     end
 end)
 
--- Báo khi người chơi rời
 target = player
 player.AncestryChanged:Connect(function(_, parent)
     if not parent then
