@@ -82,17 +82,14 @@ end
 
 -- Xử lý Webhook khi Mob xuất hiện/biến mất và thêm ESP
 local mobs = Workspace:WaitForChild("LivingBeings"):WaitForChild("Mobs")
--- mobs có sẵn
 for _, mob in ipairs(mobs:GetChildren()) do
     addESP(mob)
     sendWebhookMessage(mob.Name .. " xuất hiện", "", true)
 end
--- mobs mới
 mobs.ChildAdded:Connect(function(m)
     addESP(m)
     sendWebhookMessage(m.Name .. " xuất hiện", "", true)
 end)
--- mobs bị loại bỏ
 mobs.ChildRemoved:Connect(function(m)
     sendWebhookMessage(m.Name .. " biến mất", "", true)
 end)
@@ -101,13 +98,8 @@ end)
 local living = Workspace:WaitForChild("LivingBeings")
 local function onDaniel(child, added)
     if child.Name == "Danielbody" then
-        if added then
-            addESP(child)
-        end
-        sendWebhookMessage(
-            "Danielbody " .. (added and "xuất hiện" or "biến mất"),
-            "", true
-        )
+        if added then addESP(child) end
+        sendWebhookMessage("Danielbody " .. (added and "xuất hiện" or "biến mất"), "", true)
     end
 end
 living.ChildAdded:Connect(function(c) onDaniel(c, true) end)
@@ -116,26 +108,32 @@ if living:FindFirstChild("Danielbody") then
     onDaniel(living:FindFirstChild("Danielbody"), true)
 end
 
--- Phát hiện combat thông qua AttributeChangedSignal
+-- Phát hiện combat qua AttributeChangedSignal
 local function handleCombat(plModel)
+    local inCombat = false
     plModel:GetAttributeChangedSignal("WhoStartedCombat"):Connect(function()
         local attacker = plModel:GetAttribute("WhoStartedCombat")
-        if attacker and attacker ~= "" then
+        if attacker and attacker ~= "" and not inCombat then
             local ent = living:FindFirstChild(attacker)
             local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
             sendWebhookMessage(
-                "⚠️ Bạn đang bị tấn công ⚠️",
-                "Bởi: " .. disp .. ", " .. attacker,
+                "⚠️ "..Players.LocalPlayer.DisplayName.." đang bị tấn công ⚠️",
+                "Bởi: "..disp..", "..attacker,
                 true
             )
+            inCombat = true
+        elseif not attacker or attacker == "" then
+            inCombat = false
         end
     end)
+end
+
+-- Kết nối combat handler cho player model
+if living:FindFirstChild(Players.LocalPlayer.Name) then
+    handleCombat(living:FindFirstChild(Players.LocalPlayer.Name))
 end
 living.ChildAdded:Connect(function(c)
     if c.Name == Players.LocalPlayer.Name then
         handleCombat(c)
     end
 end)
-if living:FindFirstChild(Players.LocalPlayer.Name) then
-    handleCombat(living:FindFirstChild(Players.LocalPlayer.Name))
-end
