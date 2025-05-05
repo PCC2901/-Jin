@@ -108,32 +108,29 @@ if living:FindFirstChild("Danielbody") then
     onDaniel(living:FindFirstChild("Danielbody"), true)
 end
 
--- Phát hiện combat qua AttributeChangedSignal
-local function handleCombat(plModel)
-    local inCombat = false
-    plModel:GetAttributeChangedSignal("WhoStartedCombat"):Connect(function()
-        local attacker = plModel:GetAttribute("WhoStartedCombat")
-        if attacker and attacker ~= "" and not inCombat then
-            local ent = living:FindFirstChild(attacker)
-            local disp = (ent and ent:FindFirstChildOfClass("Humanoid") and ent.DisplayName) or "Unknown"
-            sendWebhookMessage(
-                "⚠️ "..Players.LocalPlayer.DisplayName.." đang bị tấn công ⚠️",
-                "Bởi: "..disp..", "..attacker,
-                true
-            )
-            inCombat = true
-        elseif not attacker or attacker == "" then
-            inCombat = false
+-- Phát hiện combat qua polling attribute
+local inCombatAlertSent = false
+local function checkCombatByAttribute()
+    local lb = Workspace:FindFirstChild("LivingBeings")
+    if not lb then return end
+    local pl = lb:FindFirstChild(Players.LocalPlayer.Name)
+    if pl then
+        local attackerName = pl:GetAttribute("WhoStartedCombat")
+        if attackerName and attackerName ~= "" and not inCombatAlertSent then
+            local attacker = lb:FindFirstChild(attackerName)
+            local humanoid = attacker and attacker:FindFirstChildOfClass("Humanoid")
+            local disp = (humanoid and humanoid.DisplayName) or "Unknown"
+            sendWebhookMessage("⚠️ " .. Players.LocalPlayer.DisplayName .. " đang bị tấn công ⚠️", "Bởi: " .. disp .. ", " .. attackerName, true)
+            inCombatAlertSent = true
+        elseif not attackerName or attackerName == "" then
+            inCombatAlertSent = false
         end
-    end)
+    else
+        inCombatAlertSent = false
+    end
 end
-
--- Kết nối combat handler cho player model
-if living:FindFirstChild(Players.LocalPlayer.Name) then
-    handleCombat(living:FindFirstChild(Players.LocalPlayer.Name))
-end
-living.ChildAdded:Connect(function(c)
-    if c.Name == Players.LocalPlayer.Name then
-        handleCombat(c)
+spawn(function()
+    while task.wait(1) do
+        checkCombatByAttribute()
     end
 end)
